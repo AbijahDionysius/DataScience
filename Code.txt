@@ -1,0 +1,152 @@
+#Loading the Training Data set
+train = read.csv("training.csv")
+summary(train)
+attach(train)
+train$Casenum = NULL
+str(train)
+summary(train)
+
+test = read.csv("test.csv")
+test$Casenum = NULL
+test$SeriousDlqin2yrs = as.factor(test$SeriousDlqin2yrs)
+test[is.na(test)] = 0
+summary(test)
+
+#Variable: RevolvingUtilizationOfUnsecuredLines
+#Total balance on credit cards and personal lines of credit except real estate and no installment debt like car loans divided by the sum of credit limits
+boxplot(train$RevolvingUtilizationOfUnsecuredLines, horizontal = TRUE)
+summary(train$RevolvingUtilizationOfUnsecuredLines)
+#As per the summary of the RevolvingUtilizationOfUnsecuredLines Max value is 6324. By definition RevolvingUtilizationOfUnsecuredLines cannot be greater than 1(Unless the line was closed when balance exist). Assuming the values that are above 10 are invalid, those values are brought down to less than 10.
+
+for (r in 1:nrow(train)){
+  if(train[r,2]>1000){
+  train[r,2] = train[r,2]/1000
+  }
+  if(train[r,2]>100){
+    train[r,2] = train[r,2]/100
+  }
+  if(train[r,2]>10){
+    train[r,2] = train[r,2]/10
+  }
+}
+
+
+#After this cleaing all the values are less than 10.
+summary(train$RevolvingUtilizationOfUnsecuredLines)
+boxplot(train$RevolvingUtilizationOfUnsecuredLines, col = 'RED1',horizontal = TRUE)
+#Removing the  Outliers of RevolvingUtilizationOfUnsecuredLines
+quantile(train$RevolvingUtilizationOfUnsecuredLines,.75) 
+iqrr = quantile(train$RevolvingUtilizationOfUnsecuredLines,.75)
+x1 =data.frame(iqrr+(1.5*IQR(train$RevolvingUtilizationOfUnsecuredLines)))
+x1[1,1]
+z = subset(train$RevolvingUtilizationOfUnsecuredLines,train$RevolvingUtilizationOfUnsecuredLines<x1[1,1])
+boxplot(z, col = 'BROWN',horizontal = TRUE)
+
+
+#NumberOfOpenCreditLinesAndLoans
+hist(train$NumberOfOpenCreditLinesAndLoans, breaks = 60,freq=TRUE, col="lightgreen", xlab = levels(NumberOfOpenCreditLinesAndLoans), ylab = "Frequencies")
+boxplot(train$NumberOfOpenCreditLinesAndLoans,horizontal = TRUE)
+summary(train$NumberOfOpenCreditLinesAndLoans)
+#Remving outliers of NumberOfOpenCreditLinesAndLoans
+x2 = data.frame(quantile(train$NumberOfOpenCreditLinesAndLoans,.75)+(1.5*IQR(train$NumberOfOpenCreditLinesAndLoans)))
+new_OpenCredit = subset(train$NumberOfOpenCreditLinesAndLoans,train$NumberOfOpenCreditLinesAndLoans<x2[1,1])
+boxplot(new_OpenCredit,col = 'Grey',horizontal = TRUE)
+
+
+#NumberOfDependents
+hist(train$NumberOfDependents,freq=TRUE, col="lightgrey", xlab = levels(NumberOfDependents), ylab = "Frequencies")
+boxplot(train$NumberOfDependents,horizontal = TRUE)
+mean(train$NumberOfDependents)
+train[is.na(train)] = 0
+summary(train)
+x3 = data.frame(quantile(train$NumberOfDependents,.75)+(1.5*IQR(train$NumberOfDependents)))
+new_Dependent = subset(train$NumberOfDependents,train$NumberOfDependents<x3[1,1])
+boxplot(new_Dependent, col = 'Grey',horizontal = TRUE)
+
+#Debt Ratio
+summary(train$DebtRatio)
+boxplot(train$DebtRatio, col = "skyblue", horizontal = TRUE)
+barplot(train$DebtRatio)
+#One Outlier is influencing this DebtRatio very highly
+max(train$DebtRatio)
+barplot(subset(train$DebtRatio, DebtRatio!=max(DebtRatio)))
+boxplot(train$DebtRatio, horizontal = TRUE)
+summary(train$DebtRatio)
+x4=data.frame(quantile(train$DebtRatio,.75)+(1.5*IQR(train$DebtRatio)))
+x4
+new_DebtRatio = subset(train$DebtRatio,train$DebtRatio<x4[1,1])
+#Debt Ratio cannot be greater than 1. There is some discrepancy or missing information if the Debt Ratio is too high. Hence removing the Debt ratio that is greater than the Interqurtile Range
+summary(new_DebtRatio)
+boxplot(new_DebtRatio, col = 'Yellow',horizontal = TRUE)
+
+clean_train = subset.data.frame(train, train$RevolvingUtilizationOfUnsecuredLines<x1[1,1] & train$NumberOfOpenCreditLinesAndLoans<x2[1,1] & train$NumberOfDependents<x3[1,1] & train$DebtRatio<x4[1,1])
+summary(clean_train)
+boxplot(clean_train$RevolvingUtilizationOfUnsecuredLines,col = 'Yellow', horizontal = TRUE)
+boxplot(clean_train$DebtRatio,col = 'Red', horizontal = TRUE)
+boxplot(clean_train$NumberOfOpenCreditLinesAndLoans,col = 'Blue', horizontal = TRUE)
+boxplot(clean_train$NumberOfDependents,col = 'Green', horizontal = TRUE)
+m1 = clean_train$SeriousDlqin2yrs
+m1 = as.factor(m1)
+m2 = data.frame(summary(m1))
+m2[2,1]
+m3 = c(m2[1,1],m2[2,1])
+lbls= c("NonDefaulters","Defaulters")
+pct = round((m3/sum(m3))*100)
+lbls = c(lbls,pct)
+pie(m3,labels = lbls,col = c('Orange', 'green'), main = "Pie Chart of 'Defaulters-NonDefaulters")
+
+
+detach(train)
+#Applying the SMOTE technique on the data to balance defaulters and nondefaulters
+library(DMwR)
+clean_train$SeriousDlqin2yrs = factor(clean_train$SeriousDlqin2yrs)
+str(clean_train)
+colnames(clean_train)
+smote_train = SMOTE(SeriousDlqin2yrs~.,clean_train, perc.over = 500)
+table(smote_train$SeriousDlqin2yrs)
+table(clean_train$SeriousDlqin2yrs)
+
+#Logistic Regression for SMOTEData
+modelSMOTE = glm(SeriousDlqin2yrs~., family = binomial, data = smote_train)
+predictLRSMOTE = predict(modelSMOTE, newdata = test, type = "response")
+confusion_matrix = table(test$SeriousDlqin2yrs,predictLRSMOTE>0.5)
+confusion_matrix
+TPRS = 41/63
+TPRS
+FNRS = 578/(578+359)
+FNRS
+
+#Logistic Regression for Clean Data
+modelLRclean = glm(SeriousDlqin2yrs~., family = binomial, data = clean_train)
+predictLRclean = predict(modelLRclean, newdata = test, type = "response")
+confusion_matrixclean = table(test$SeriousDlqin2yrs,predictLRclean>0.5)
+confusion_matrixclean
+TPRC = 15/63
+FNRC = 757/(757+180)
+TPRC
+FNRC
+
+#Logistic Regression for Raw data
+modeltrain = glm(SeriousDlqin2yrs~., family = binomial, data = train)
+predicttrain = predict(modeltrain,newdata = test, type = "response")
+confusion_matrixtrain = table(test$SeriousDlqin2yrs,predicttrain>0.5)
+confusion_matrixtrain
+TPRR = 1/63
+FNRR = 1/937
+TPRR
+FNRR
+
+library(pROC)
+aucSMOTE = auc(test$SeriousDlqin2yrs,predictLRSMOTE)
+aucSMOTE
+aucClean = auc(test$SeriousDlqin2yrs,predictLRclean)
+aucClean
+aucTrain = auc(test$SeriousDlqin2yrs,predicttrain)
+aucTrain
+LRresult = data.frame(matrix(c(TPRR,TPRC,TPRS,FNRR,FNRC,FNRS,aucTrain,aucClean,aucSMOTE),nrow = 3, ncol = 3))
+                      
+colnames(LRresult) = c("True Positive Rate","False Negative rate", "AUC")
+rownames(LRresult) = c("Raw data set","Cleansed Data set","SMOTE Data set")
+LRresult
+
+#Conclusion : Though there is a decrease in the FNR from cleansed data set to SMOTE data set, we can notice that there is very high increase in the TPR. Also it is important to note that Predicting a defaulter is more important than the predicting a non defaulter
