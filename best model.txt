@@ -1,0 +1,50 @@
+churn_data <- read.csv("CHURN.txt", header = TRUE)
+churn<-churn_data
+library(dplyr)
+attach(churn)
+str(churn)
+dim(churn)
+summary(churn)
+head(churn)
+table(churn$Churn.)
+colSums(is.na(churn))
+
+churn=subset(churn, select = -c(Phone))
+
+View(churn)
+set.seed(30)
+split2 <- sample(1:nrow(churn), .7*nrow(churn))
+train_data <- churn[split2,]
+test_data <- churn[-split2,]
+dim(train_data)
+dim(test_data)
+
+#logistic reg
+mo<-glm(Churn.~. -State, data = train_data, family = "binomial")
+summary(mo)
+
+
+predm <- predict(mo, test_data, type = "response")
+predm
+
+predq_cond <- ifelse(predm>.5,1,0)
+predq_cond
+
+library(caret)
+table(test_data$Churn.,predq_cond)
+(835+37)/(835+25+103+37)
+
+#random forest
+library(randomForest)
+
+mod <-randomForest(train_data$Churn.~. , data =train_data, mtry =19 , importance = TRUE)
+mod
+summary(mod)
+
+
+pred<-predict(mod,test_data)
+pred
+table(pred,test_data$Churn.)
+
+confusionMatrix(pred, test_data$Churn.)
+Metrics::accuracy(pred,test_data$Churn.)
